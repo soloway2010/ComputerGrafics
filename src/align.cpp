@@ -17,7 +17,7 @@ public:
     {
         uint size = 2 * radius + 1;
 
-        std::tuple<uint, uint, uint> res;
+        std::tuple<double, double, double> res;
 
         for (uint i = 0; i < size; ++i) {
             for (uint j = 0; j < size; ++j) {
@@ -46,7 +46,7 @@ Image one_dim_convert(Image src_image, Matrix<double> kernel, int radius, int di
 
     for(int j = 0; j < n; j++)
     	for(int i = start_i; i < end_i; i++){
-    		std::tuple<uint, uint, uint> sum = std::make_tuple(0, 0, 0);
+    		std::tuple<double, double, double> sum = std::make_tuple(0, 0, 0);
     		for(int k = -radius; k <= radius; k++){
     			get<0>(sum) += (dir ? get<0>(src_image(i + k, j)) : get<0>(src_image(j, i + k)))*kernel(k + radius, 0);
     			get<1>(sum) += (dir ? get<1>(src_image(i + k, j)) : get<1>(src_image(j, i + k)))*kernel(k + radius, 0);
@@ -56,6 +56,36 @@ Image one_dim_convert(Image src_image, Matrix<double> kernel, int radius, int di
     	}
 
     return dst_image;
+}
+
+std::tuple<int, int> get_dir(double theta){
+	const double pi = 3.14;
+
+	if(theta >= -pi/8 && theta < pi/8)
+		return std::make_tuple(0, 1);
+
+	if(theta >= pi/8 && theta < 3*pi/8)
+		return std::make_tuple(1, 1);
+
+	if(theta >= 3*pi/8 && theta < 5*pi/8)
+		return std::make_tuple(1, 0);
+
+	if(theta >= 5*pi/8 && theta < 7*pi/8)
+		return std::make_tuple(1, -1);
+
+	if(theta >= -3*pi/8 && theta < -pi/8)
+		return std::make_tuple(-1, 1);
+
+	if(theta >= -5*pi/8 && theta < -3*pi/8)
+		return std::make_tuple(-1, 0);
+
+	if(theta >= -7*pi/8 && theta < -5*pi/8)
+		return std::make_tuple(-1, -1);
+
+	if((theta >= 7*pi/8 && theta <= pi) || (theta >= -pi && theta < -7*pi/8))
+		return std::make_tuple(0, -1);
+
+	return std::make_tuple(0, 1);
 }
 
 uint MSE(Image image1, Image image2, int shift){
@@ -96,7 +126,7 @@ uint COR(Image image1, Image image2, int shift){
 Image align(Image srcImage, bool isPostprocessing, std::string postprocessingType, double fraction, bool isMirror, 
             bool isInterp, bool isSubpixel, double subScale)
 {
-	/*Image image1 = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
+	Image image1 = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
 	Image image2 = srcImage.submatrix(srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
 	Image image3 = srcImage.submatrix(2*srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
 
@@ -151,15 +181,16 @@ Image align(Image srcImage, bool isPostprocessing, std::string postprocessingTyp
 
 	for(uint i = SHIFT + shift; i < SHIFT + shift + image1.n_rows; i++)
 		for(uint j = 0; j < dstImage.n_cols; j++)
-			get<0>(dstImage(i, j)) = get<0>(image3(i - SHIFT - shift, j));*/
+			get<0>(dstImage(i, j)) = get<0>(image3(i - SHIFT - shift, j));
 
-    return canny(srcImage, 0, 0);
+    return dstImage;
 }
 
 Image sobel_x(Image src_image) {
     Matrix<double> kernel = {{-1, 0, 1},
                              {-2, 0, 2},
                              {-1, 0, 1}};
+    convert::radius = 1;
     return custom(src_image, kernel);
 }
 
@@ -167,11 +198,16 @@ Image sobel_y(Image src_image) {
     Matrix<double> kernel = {{ 1,  2,  1},
                              { 0,  0,  0},
                              {-1, -2, -1}};
+    convert::radius = 1;
     return custom(src_image, kernel);
 }
 
 Image unsharp(Image src_image) {
-    return src_image;
+	Matrix<double> kernel = {{ -1/6,  -2/3,  -1/6},
+                             { -2/3,  13/3,  -2/3},
+                             {-1/6, -2/3, -1/6}};
+	convert::radius = 1;
+    return custom(src_image, kernel);
 }
 
 Image gray_world(Image src_image) {
@@ -246,6 +282,52 @@ Image median_const(Image src_image, int radius) {
 
 Image canny(Image src_image, int threshold1, int threshold2) {
 	Image dst_image = gaussian_separable(src_image, 1.4, 2);
+
+	Image imIx = sobel_x(dst_image);
+	Image imIy = sobel_y(dst_image);
+
+	Matrix<double> G(dst_image.n_rows, dst_image.n_cols);
+	Matrix<double> theta(dst_image.n_rows, dst_image.n_cols);
+
+	for(uint i = 0; i < dst_image.n_rows; i++)
+		for(uint j = 0; j < dst_image.n_cols; j++){
+			uint x = get<0>(imIx(i, j));
+			uint y = get<0>(imIy(i, j));
+
+			G(i, j) = sqrt(x*x + y*y);
+			theta(i, j) = atan2(y, x);
+		}
+
+	Matrix<double> G_tres(G.n_rows, G.n_cols);
+	Matrix<int> G_hyst(G.n_rows, G.n_cols);
+
+	for(uint i = 1; i < G.n_rows - 1; i++)
+		for(uint j = 1; j < G.n_cols - 1; j++){
+			std::tuple<int, int> vec = get_dir(theta(i, j));
+
+			double f_pix = G(i + get<0>(vec), j + get<1>(vec));
+			double s_pix = G(i - get<0>(vec), j - get<1>(vec));
+
+			if(G(i, j) >= f_pix && G(i, j) >= s_pix){
+				if(G(i, j) > threshold2){
+					G_tres(i, j) = G(i, j);
+					G_hyst(i, j) = 2;
+				}else if(G(i, j) > threshold1){
+					G_hyst(i, j) = 1;
+					G_tres(i, j) = 0;
+				}
+				else
+					G_tres(i, j) = G_hyst(i, j) = 0;
+			}
+			else
+				G_tres(i, j) = 0;
+		}
+
+
+
+	for(uint i = 0; i < dst_image.n_rows; i++)
+		for(uint j = 0; j < dst_image.n_cols; j++)
+			dst_image(i, j) = std::make_tuple(G_tres(i, j), G_tres(i, j), G_tres(i, j));
 
     return dst_image;
 }
