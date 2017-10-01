@@ -126,7 +126,7 @@ uint COR(Image image1, Image image2, int shift){
 Image align(Image srcImage, bool isPostprocessing, std::string postprocessingType, double fraction, bool isMirror, 
             bool isInterp, bool isSubpixel, double subScale)
 {
-	Image image1 = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
+	/*Image image1 = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
 	Image image2 = srcImage.submatrix(srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
 	Image image3 = srcImage.submatrix(2*srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
 
@@ -181,9 +181,9 @@ Image align(Image srcImage, bool isPostprocessing, std::string postprocessingTyp
 
 	for(uint i = SHIFT + shift; i < SHIFT + shift + image1.n_rows; i++)
 		for(uint j = 0; j < dstImage.n_cols; j++)
-			get<0>(dstImage(i, j)) = get<0>(image3(i - SHIFT - shift, j));
+			get<0>(dstImage(i, j)) = get<0>(image3(i - SHIFT - shift, j));*/
 
-    return dstImage;
+    return gray_world(srcImage);
 }
 
 Image sobel_x(Image src_image) {
@@ -211,7 +211,34 @@ Image unsharp(Image src_image) {
 }
 
 Image gray_world(Image src_image) {
-    return src_image;
+	uint r, g, b, sum_r = 0, sum_g = 0, sum_b = 0; 
+
+	for(uint i = 0; i < src_image.n_rows; i++)
+		for(uint j = 0; j < src_image.n_cols; j++){
+			 std::tie(r, g, b) = src_image(i, j);
+             sum_r += r;
+             sum_g += g;
+             sum_b += b;
+		}
+
+	uint norm = src_image.n_rows * src_image.n_cols;
+
+	sum_r /= norm;
+	sum_g /= norm;
+	sum_b /= norm;
+
+	uint S = (sum_r + sum_g + sum_b)/3;
+
+	Image dst_image = src_image;
+
+	for(uint i = 0; i < dst_image.n_rows; i++)
+		for(uint j = 0; j < dst_image.n_cols; j++){
+			get<0>(dst_image(i, j)) *= S/sum_r;
+			get<1>(dst_image(i, j)) *= S/sum_g;
+			get<2>(dst_image(i, j)) *= S/sum_b;
+		}
+
+    return dst_image;
 }
 
 Image resize(Image src_image, double scale) {
