@@ -88,102 +88,96 @@ std::tuple<int, int> get_dir(double theta){
 	return std::make_tuple(0, 1);
 }
 
-uint MSE(Image image1, Image image2, int shift){
+std::tuple<int, int> MSE(Image image1, Image image2){
 
-	uint sum = 0;
+	int off_x = 0;
+	int off_y = 0;
+	uint min_sum = std::numeric_limits<uint>::max();
 
-	if(shift >= 0){
-		for(uint i = 0; i < image1.n_rows - shift; i++)
-			for(uint j = 0; j < image1.n_cols; j++)
-				sum += (get<0>(image2(i, j)) - get<0>(image1(i + shift, j))) * (get<0>(image2(i, j)) - get<0>(image1(i + shift, j)));
-	}else{
-		for(uint i = 0; i < image1.n_rows + shift; i++)
-			for(uint j = 0; j < image1.n_cols; j++)
-				sum += (get<0>(image1(i, j)) - get<0>(image2(i - shift, j))) * (get<0>(image1(i, j)) - get<0>(image2(i - shift, j)));
-	}
-	sum /= (image1.n_rows - abs(shift)) * image1.n_cols;
+	Image im1;
+	Image im2;
 
-	return sum;
+	for(int i = -SHIFT + 1; i < SHIFT; i++)
+		for(int j = -SHIFT + 1; j < SHIFT; j++){
+			int x = abs(i);
+			int	y = abs(j);
+			uint sum = 0;
+
+			im1 = image1.submatrix(y*(j <= 0), x*(i >= 0), image1.n_rows - y, image1.n_cols - x);
+			im2 = image2.submatrix(y*(j >= 0), x*(i <= 0), image1.n_rows - y, image1.n_cols - x);
+
+			for(uint k1 = 0; k1 < im1.n_rows; k1++)
+				for(uint k2 = 0; k2 < im1.n_cols; k2++)
+					sum += (get<0>(im1(k1, k2)) - get<0>(im2(k1, k2)))*(get<0>(im1(k1, k2)) - get<0>(im2(k1, k2)));
+
+			if(sum < min_sum){
+				min_sum = sum;
+				off_x = i;
+				off_y = j;
+			}
+		}
+
+	return std::make_tuple(off_x, off_y);
 }
 
-uint COR(Image image1, Image image2, int shift){
+std::tuple<int, int> COR(Image image1, Image image2, int shift){
 
-	uint sum = 0;
+	int off_x = 0;
+	int off_y = 0;
+	uint max_sum = 0;
 
-	if(shift >= 0){
-		for(uint i = 0; i < image1.n_rows - shift; i++)
-			for(uint j = 0; j < image1.n_cols; j++)
-				sum += get<0>(image2(i, j)) * get<0>(image1(i + shift, j));
-	}else{
-		for(uint i = 0; i < image1.n_rows + shift; i++)
-			for(uint j = 0; j < image1.n_cols; j++)
-				sum += get<0>(image1(i, j)) * get<0>(image2(i - shift, j));
-	}
-	
-	return sum;
+	Image im1;
+	Image im2;
+
+	for(int i = -SHIFT + 1; i < SHIFT; i++)
+		for(int j = -SHIFT + 1; j < SHIFT; j++){
+			int x = abs(i);
+			int	y = abs(j);
+			uint sum = 0;
+
+			im1 = image1.submatrix(y*(j <= 0), x*(i >= 0), image1.n_rows - y, image1.n_cols - x);
+			im2 = image2.submatrix(y*(j >= 0), x*(i <= 0), image1.n_rows - y, image1.n_cols - x);
+
+			for(uint k1 = 0; k1 < im1.n_rows; k1++)
+				for(uint k2 = 0; k2 < im1.n_cols; k2++)
+					sum += get<0>(im1(k1, k2)) * get<0>(im2(k1, k2));
+
+			if(sum > max_sum){
+				max_sum = sum;
+				off_x = i;
+				off_y = j;
+			}
+		}
+
+	return std::make_tuple(off_x, off_y);
 }
 
 Image align(Image srcImage, bool isPostprocessing, std::string postprocessingType, double fraction, bool isMirror, 
             bool isInterp, bool isSubpixel, double subScale)
 {
-	/*Image image1 = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
-	Image image2 = srcImage.submatrix(srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
-	Image image3 = srcImage.submatrix(2*srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
+	Image image_b = srcImage.submatrix(0, 0, srcImage.n_rows/3, srcImage.n_cols);
+	Image image_g = srcImage.submatrix(srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
+	Image image_r = srcImage.submatrix(2*srcImage.n_rows/3, 0, srcImage.n_rows/3, srcImage.n_cols);
 
-	Image dstImage(image1.n_rows + 2*SHIFT, image2.n_cols);
+	Image dstImage(image_r.n_rows + 2*SHIFT, image_r.n_cols + 2*SHIFT);
 
-	for(uint i = SHIFT; i < SHIFT + image1.n_rows; i++)
-		for(uint j = 0; j < dstImage.n_cols; j++)
-			get<2>(dstImage(i, j)) = get<0>(image1(i - SHIFT, j));
+	for(uint i = 0; i < image_r.n_rows; i++)
+		for(uint j = 0; j < image_r.n_cols; j++)
+			get<0>(dstImage(i + SHIFT, j + SHIFT)) = get<0>(image_r(i, j));
 
-	uint sum = MSE(image1, image2, -SHIFT + 1);
-	int shift = -SHIFT + 1;
+	std::tuple<int, int> offset = MSE(image_r, image_g);
 
-	for(int i = -SHIFT + 2; i < SHIFT; i++){
-		uint tmp = MSE(image1, image2, i);
-		if(tmp < sum){
-			sum = tmp;
-			shift = i;
-		}
-	}
+	for(uint i = 0; i < image_g.n_rows; i++)
+		for(uint j = 0; j < image_g.n_cols; j++)
+			get<1>(dstImage(i + SHIFT - get<1>(offset), j + SHIFT + get<0>(offset))) = get<1>(image_g(i, j));
 
-	std::cout << shift << endl;
+	offset = MSE(image_r, image_b);
 
-	for(uint i = SHIFT + shift; i < SHIFT + shift + image1.n_rows; i++)
-		for(uint j = 0; j < dstImage.n_cols; j++)
-			get<1>(dstImage(i, j)) = get<0>(image2(i - SHIFT - shift, j));
+	for(uint i = 0; i < image_b.n_rows; i++)
+		for(uint j = 0; j < image_b.n_cols; j++)
+			get<2>(dstImage(i + SHIFT - get<1>(offset), j + SHIFT + get<0>(offset))) = get<2>(image_b(i, j));
 
-	sum = MSE(image1, image3, -SHIFT + 1);
-	int shift1 = -SHIFT + 1;
-
-	for(int i = -SHIFT + 2; i < SHIFT; i++){
-		uint tmp = MSE(image1, image3, i);
-		if(tmp < sum){
-			sum = tmp;
-			shift1 = i;
-		}
-	}
-
-	sum = MSE(image2, image3, -SHIFT + 1);
-	int shift2 = -SHIFT + 1;
-
-	for(int i = -SHIFT + 2; i < SHIFT; i++){
-		uint tmp = MSE(image2, image3, i);
-		if(tmp < sum){
-			sum = tmp;
-			shift2 = i;
-		}
-	}
-
-	std::cout << shift1 << " " << shift2 << endl;
-
-	shift = (shift1 + shift2)/2;
-
-	for(uint i = SHIFT + shift; i < SHIFT + shift + image1.n_rows; i++)
-		for(uint j = 0; j < dstImage.n_cols; j++)
-			get<0>(dstImage(i, j)) = get<0>(image3(i - SHIFT - shift, j));*/
-
-    return gray_world(srcImage);
+    return dstImage.submatrix(SHIFT, SHIFT, image_r.n_rows, image_r.n_cols);
 }
 
 Image sobel_x(Image src_image) {
@@ -350,11 +344,7 @@ Image canny(Image src_image, int threshold1, int threshold2) {
 				G_tres(i, j) = 0;
 		}
 
-
-
-	for(uint i = 0; i < dst_image.n_rows; i++)
-		for(uint j = 0; j < dst_image.n_cols; j++)
-			dst_image(i, j) = std::make_tuple(G_tres(i, j), G_tres(i, j), G_tres(i, j));
-
+	
+	
     return dst_image;
 }
