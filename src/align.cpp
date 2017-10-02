@@ -1,5 +1,6 @@
 #include "align.h"
 #include <string>
+#include <set>
 
 using std::string;
 using std::cout;
@@ -36,6 +37,91 @@ public:
 };
 
 int convert::radius = 1;
+
+//My functions
+std::vector<std::set<int>> sets;
+
+void find_strong_labels(std::vector<int>& strong_labels, std::set<int>& strong_pix){
+	for(uint i = 0; i < sets.size(); i++){
+		auto end = sets[i].end();
+		for(uint j = 0; j < strong_labels.size(); j++)
+			if(sets[i].find(strong_labels[j]) != end){
+				strong_pix.insert(sets[i].begin(), end);
+				break;
+			}
+		}
+}
+
+void add_eq(int A, int B, int C, int D){
+	for(uint i = 0; i < sets.size(); i++){
+		auto end = sets[i].end();
+		if(sets[i].find(A) != end ||
+		   sets[i].find(B) != end ||
+		   sets[i].find(C) != end ||
+		   sets[i].find(D) != end)
+		{
+			if(A) sets[i].insert(A);
+			if(B) sets[i].insert(B);
+			if(C) sets[i].insert(C);
+			if(D) sets[i].insert(D);
+			return;
+		}
+	}
+
+	std::set<int> new_set;
+	if(A) new_set.insert(A);
+	if(B) new_set.insert(B);
+	if(C) new_set.insert(C);
+	if(D) new_set.insert(D);
+
+	sets.push_back(new_set);
+}
+
+Matrix<int> get_connected(Matrix<int> mat, std::set<int>& strong_pix){
+	Matrix<int> res(mat.n_rows, mat.n_cols);
+	std::vector<int> strong_labels;
+	uint label = 0;
+
+	for(uint i = 0; i < mat.n_rows; i++)
+		for(uint j = 0; j < mat.n_cols; j++){
+			int Z = mat(i, j);
+			
+			if(!Z){
+				res(i, j) = 0;
+				continue;
+			}
+
+			int A = (j == 0? 0 : res(i, j - 1));
+			int B = (j == 0 || i == 0? 0 : res(i - 1, j - 1));
+			int C = (i == 0? 0 : res(i - 1, j));
+			int D = (i == 0 || j == mat.n_cols - 1? 0 : res(i - 1, j + 1));
+
+			if(A + B + C + D == 0)
+				res(i, j) = ++label;
+			else {
+				add_eq(A, B, C, D);
+
+				if(A)
+					res(i, j) = A;
+				else if(B)
+					res(i, j) = B;
+				else if(C)
+					res(i, j) = C;
+				else if(D)
+					res(i, j) = D;
+			}
+
+			if(Z == 2)
+				strong_labels.push_back(label);
+		}
+
+	for(uint i = 0; i < strong_labels.size(); i++)
+		strong_pix.insert(strong_labels[i]);
+
+	find_strong_labels(strong_labels, strong_pix);
+
+	return res;
+}
 
 Image one_dim_convert(Image src_image, Matrix<double> kernel, int radius, int dir){
 	const int start_i = radius;
@@ -152,6 +238,7 @@ std::tuple<int, int> COR(Image image1, Image image2, int shift){
 	return std::make_tuple(off_x, off_y);
 }
 
+//Made before
 Image align(Image srcImage, bool isPostprocessing, std::string postprocessingType, double fraction, bool isMirror, 
             bool isInterp, bool isSubpixel, double subScale)
 {
@@ -344,7 +431,19 @@ Image canny(Image src_image, int threshold1, int threshold2) {
 				G_tres(i, j) = 0;
 		}
 
-	
-	
+
+    std::set<int> strong_pix;
+
+   	Matrix<int> labels = get_connected(G_hyst, strong_pix);
+
+    auto end = strong_pix.end();
+
+   	for(uint i = 0; i < G.n_rows; i++)
+		for(uint j = 0; j < G.n_cols; j++){
+			if(strong_pix.find(labels(i, j)) != end)
+				G_tres(i, j) = G(i, j);
+			dst_image(i, j) = std::make_tuple(G_tres(i, j), G_tres(i, j), G_tres(i, j));
+		}
+
     return dst_image;
 }
