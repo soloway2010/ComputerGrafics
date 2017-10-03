@@ -351,6 +351,8 @@ Image align(Image srcImage, bool isPostprocessing, std::string postprocessingTyp
 			dstImage = gray_world(dstImage);
 		else if(postprocessingType == "--unsharp")
 			dstImage = unsharp(dstImage);
+		else if(postprocessingType == "--autocontrast")
+			dstImage = autocontrast(srcImage, 0.05);
 	}
 
     return dstImage;
@@ -423,9 +425,8 @@ Image custom(Image src_image, Matrix<double> kernel) {
 
 Image autocontrast(Image src_image, double fraction) {
 
-	Matrix<uint> intense(src_image.n_rows, src_image.n_cols);
 	uint* hist = new uint[256];
-	uint min_v, max_v;
+	double min_v = 0, max_v = 255;
 	bool min_flag = false, max_flag = false;
 	uint min_n = fraction*src_image.n_rows*src_image.n_cols;
 	uint max_n = (1 - fraction)*src_image.n_rows*src_image.n_cols;
@@ -435,8 +436,8 @@ Image autocontrast(Image src_image, double fraction) {
 
 	for(uint i = 0; i < src_image.n_rows; i++)
 		for(uint j = 0; j < src_image.n_cols; j++){
-			intense(i, j) = 0.2125*get<0>(src_image(i, j)) + 0.7154*get<1>(src_image(i, j)) + 0.0721*get<2>(src_image(i, j));
-			hist[intense(i, j)]++;
+			uint intense = 0.2125*get<0>(src_image(i, j)) + 0.7154*get<1>(src_image(i, j)) + 0.0721*get<2>(src_image(i, j));
+			hist[intense]++;
 		}
 
 	for(int i = 1; i < 256; i++){
@@ -453,9 +454,30 @@ Image autocontrast(Image src_image, double fraction) {
 		}
 	}
 
-	
+	double b_c = 255.0/(1 - max_v/min_v);
+	double a = -b_c/min_v;
 
-    return src_image;
+	Image dst_image = src_image;
+
+	for(uint i = 0; i < src_image.n_rows; i++)
+		for(uint j = 0; j < src_image.n_cols; j++){
+			int r = get<0>(src_image(i, j))*a + b_c;
+			int g = get<1>(src_image(i, j))*a + b_c;
+			int b = get<2>(src_image(i, j))*a + b_c;
+
+			r = (r > 0 ? r : 0);
+	        r = (r < 255 ? r : 255);
+
+	        g = (g > 0 ? g : 0);
+	        g = (g < 255 ? g : 255);
+
+	        b = (b > 0 ? b : 0);
+	        b = (b < 255 ? b : 255);
+
+	        dst_image(i, j) = std::make_tuple(r, g, b);
+		}
+
+    return dst_image;
 }
 
 Image gaussian(Image src_image, double sigma, int radius)  {
