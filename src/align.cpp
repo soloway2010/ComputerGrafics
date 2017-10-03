@@ -18,17 +18,21 @@ public:
     {
         uint size = 2 * radius + 1;
 
-        std::tuple<double, double, double> res;
+        double res_r = 0, res_g = 0, res_b = 0;
 
         for (uint i = 0; i < size; ++i) {
             for (uint j = 0; j < size; ++j) {
-                get<0>(res) += kernel(i, j)*get<0>(m(i, j));
-                get<1>(res) += kernel(i, j)*get<1>(m(i, j));
-                get<2>(res) += kernel(i, j)*get<2>(m(i, j));
+                res_r += kernel(i, j)*get<0>(m(i, j));
+                res_g += kernel(i, j)*get<1>(m(i, j));
+                res_b += kernel(i, j)*get<2>(m(i, j));
             }
         }
 
-        return res;
+        res_r = (res_r > 0 ? res_r : 0);
+        res_g = (res_g > 0 ? res_g : 0);
+        res_b = (res_b > 0 ? res_b : 0);
+
+        return std::make_tuple(res_r, res_g, res_b);
     }
     // Radius of neighbourhoud, which is passed to that operator
     static int radius;
@@ -334,7 +338,17 @@ Image align(Image srcImage, bool isPostprocessing, std::string postprocessingTyp
 		for(uint j = 0; j < image_b.n_cols; j++)
 			get<2>(dstImage(i + SHIFT - get<1>(offset), j + SHIFT + get<0>(offset))) = get<2>(image_b(i, j));
 
-    return dstImage.submatrix(SHIFT, SHIFT, image_r.n_rows, image_r.n_cols);
+	dstImage = dstImage.submatrix(SHIFT, SHIFT, image_r.n_rows, image_r.n_cols);
+
+	if(isPostprocessing)
+	{
+		if(postprocessingType == "--gray-world")
+			dstImage = gray_world(dstImage);
+		else if(postprocessingType == "--unsharp")
+			dstImage = unsharp(dstImage);
+	}
+
+    return dstImage;
 }
 
 Image sobel_x(Image src_image) {
@@ -354,9 +368,9 @@ Image sobel_y(Image src_image) {
 }
 
 Image unsharp(Image src_image) {
-	Matrix<double> kernel = {{ -1/6,  -2/3,  -1/6},
-                             { -2/3,  13/3,  -2/3},
-                             {-1/6, -2/3, -1/6}};
+	Matrix<double> kernel = {{ -1./6,  -2./3,  -1./6},
+                             { -2./3,  13./3,  -2./3},
+                             {-1./6, -2./3, -1./6}};
 	convert::radius = 1;
     return custom(src_image, kernel);
 }
@@ -378,7 +392,7 @@ Image gray_world(Image src_image) {
 	sum_g /= norm;
 	sum_b /= norm;
 
-	uint S = (sum_r + sum_g + sum_b)/3;
+	double S = (sum_r + sum_g + sum_b)/3;
 
 	Image dst_image = src_image;
 
