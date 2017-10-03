@@ -123,16 +123,16 @@ Matrix<int> get_connected(Matrix<int> mat, std::set<int>& strong_pix){
 	return res;
 }
 
-uint get_maxs(Matrix<int> G, bool ax1, bool ax2, bool ax3, bool ax4){
+uint get_maxs_u_d(Matrix<int> G, bool ax){
 	uint max1 = 0, max2 = 0;
 	uint n_max1 = 0, n_max2 = 0;
 
 	uint r = G.n_rows;
 	uint c = G.n_cols;
 
-	for(uint i = (ax1?0:0.95*r); i < (ax2?0.05*r:r); i++){
+	for(uint i = (ax?0:0.95*r); i < (ax?0.05*r:r); i++){
 		uint sum = 0;
-		for(uint j = (ax3?0:0.95*c); j < (ax4?0.05*c:c); j++)
+		for(uint j = 0; j < c; j++)
 			if(G(i, j) == 3)
 				sum++;
 
@@ -150,7 +150,42 @@ uint get_maxs(Matrix<int> G, bool ax1, bool ax2, bool ax3, bool ax4){
 
 	uint n;
 
-	if(ax1 == ax2)
+	if(ax)
+		n = (n_max1 > n_max2 ? n_max1 : n_max2);
+	else
+		n = (n_max1 < n_max2 ? n_max1 : n_max2);
+
+	return n;
+}
+
+uint get_maxs_l_r(Matrix<int> G, bool ax){
+	uint max1 = 0, max2 = 0;
+	uint n_max1 = 0, n_max2 = 0;
+
+	uint r = G.n_rows;
+	uint c = G.n_cols;
+
+	for(uint i = (ax?0:0.95*c); i < (ax?0.05*r:c); i++){
+		uint sum = 0;
+		for(uint j = 0; j < r; j++)
+			if(G(j, i) == 3)
+				sum++;
+
+		if(sum > max1){
+			max2 = max1;
+			n_max2 = n_max1;
+
+			max1 = sum;
+			n_max1 = i;
+		}else if(sum > max2){
+			max2 = sum;
+			n_max2 = i;
+		}
+	}
+
+	uint n;
+
+	if(ax)
 		n = (n_max1 > n_max2 ? n_max1 : n_max2);
 	else
 		n = (n_max1 < n_max2 ? n_max1 : n_max2);
@@ -478,10 +513,10 @@ Image canny(Image src_image, int threshold1, int threshold2) {
 			if(strong_pix.find(labels(i, j)) != end && G_hyst(i, j) == 1)
 				G_hyst(i, j) = 3;
 
-	uint n_u = get_maxs(G_hyst, 1, 1, 1, 0);
-	uint n_l = get_maxs(G_hyst, 1, 1, 1, 0);
-	uint n_r = get_maxs(G_hyst, 1, 0, 0, 0);
-	uint n_d = get_maxs(G_hyst, 0, 0, 1, 0);
+	uint n_u = get_maxs_u_d(G_hyst, 1);
+	uint n_d = get_maxs_u_d(G_hyst, 0);
+	uint n_l = get_maxs_l_r(G_hyst, 1);
+	uint n_r = get_maxs_l_r(G_hyst, 0);
 
     return src_image.submatrix(n_u, n_l, n_d - n_u, n_r - n_l);
 }
