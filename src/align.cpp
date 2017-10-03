@@ -29,8 +29,13 @@ public:
         }
 
         res_r = (res_r > 0 ? res_r : 0);
+        res_r = (res_r < 255 ? res_r : 255);
+
         res_g = (res_g > 0 ? res_g : 0);
+        res_g = (res_g < 255 ? res_g : 255);
+
         res_b = (res_b > 0 ? res_b : 0);
+        res_b = (res_b < 255 ? res_b : 255);
 
         return std::make_tuple(res_r, res_g, res_b);
     }
@@ -417,6 +422,39 @@ Image custom(Image src_image, Matrix<double> kernel) {
 }
 
 Image autocontrast(Image src_image, double fraction) {
+
+	Matrix<uint> intense(src_image.n_rows, src_image.n_cols);
+	uint* hist = new uint[256];
+	uint min_v, max_v;
+	bool min_flag = false, max_flag = false;
+	uint min_n = fraction*src_image.n_rows*src_image.n_cols;
+	uint max_n = (1 - fraction)*src_image.n_rows*src_image.n_cols;
+
+	for(int i = 0; i < 256; i++)
+		hist[i] = 0;
+
+	for(uint i = 0; i < src_image.n_rows; i++)
+		for(uint j = 0; j < src_image.n_cols; j++){
+			intense(i, j) = 0.2125*get<0>(src_image(i, j)) + 0.7154*get<1>(src_image(i, j)) + 0.0721*get<2>(src_image(i, j));
+			hist[intense(i, j)]++;
+		}
+
+	for(int i = 1; i < 256; i++){
+		hist[i] += hist[i-1];
+		
+		if(hist[i] > min_n && !min_flag){
+			min_v = i;
+			min_flag = true;
+		}
+
+		if(hist[i] > max_n && !max_flag){
+			max_v = i;
+			max_flag = true;
+		}
+	}
+
+	
+
     return src_image;
 }
 
