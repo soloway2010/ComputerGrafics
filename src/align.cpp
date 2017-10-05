@@ -48,6 +48,89 @@ public:
 int convert::radius = 1;
 
 //My functions
+Image mirror(Image src_image){
+	uint shift = convert::radius;
+
+	Image dst_image(src_image.n_rows + 2*shift, src_image.n_cols + 2*shift);
+
+	for(uint i = shift; i < src_image.n_rows + shift; i++)
+		for(uint j = shift; j < src_image.n_cols + shift; j++)
+			dst_image(i, j) = src_image(i - shift, j - shift);
+
+	for(uint i = 0; i < shift; i++)
+		for(uint j = 0; j < shift; j++)
+			dst_image(i, j) = src_image(0, 0);
+
+	for(uint i = 0; i < shift; i++)
+		for(uint j = src_image.n_cols - shift; j < src_image.n_cols; j++)
+			dst_image(i, j) = src_image(0, src_image.n_cols - 1);
+
+	for(uint i = src_image.n_rows - shift; i < src_image.n_rows; i++)
+		for(uint j = 0; j < shift; j++)
+			dst_image(i, j) = src_image(src_image.n_rows - 1, 0);
+
+	for(uint i = src_image.n_rows - shift; i < src_image.n_rows; i++)
+		for(uint j = src_image.n_cols - shift; j < src_image.n_cols; j++)
+			dst_image(i, j) = src_image(src_image.n_rows - 1, src_image.n_cols - 1);
+
+	for(uint i = shift; i < src_image.n_cols + shift; i++)
+		for(uint j = 0; j < shift; j++)
+			dst_image(j, i) = src_image(j, i - shift);
+
+	for(uint i = shift; i < src_image.n_cols + shift; i++)
+		for(uint j = src_image.n_rows - shift; j < src_image.n_rows; j++)
+			dst_image(j + shift, i) = src_image(j, i - shift);
+
+	for(uint i = shift; i < src_image.n_rows + shift; i++)
+		for(uint j = 0; j < shift; j++)
+			dst_image(i, j) = src_image(i - shift, j);
+
+	for(uint i = shift; i < src_image.n_rows + shift; i++)
+		for(uint j = src_image.n_cols - shift; j < src_image.n_cols; j++)
+			dst_image(i, j + shift) = src_image(i - shift, j);
+
+	return dst_image;
+}
+
+//Median
+std::tuple<uint, uint, uint> sort_neighb(Image n){
+	int size = n.n_cols * n.n_rows;
+	uint* mas_r = new uint[size];
+	uint* mas_g = new uint[size];
+	uint* mas_b = new uint[size];
+
+	for(uint i = 0; i < n.n_rows; i++)
+		for(uint j = 0; j < n.n_cols; j++){
+			mas_r[i*n.n_cols + j] = get<0>(n(i, j));
+			mas_g[i*n.n_cols + j] = get<1>(n(i, j));
+			mas_b[i*n.n_cols + j] = get<2>(n(i, j));
+		}
+
+	for(int i = 0; i < size; i++)
+		for(int j = 0; j < size - i - 1; j++){
+			if(mas_r[j] > mas_r[j + 1]){
+				uint tmp = mas_r[j];
+				mas_r[j] = mas_r[j + 1];
+				mas_r[j + 1] = tmp;
+			}
+			if(mas_g[j] > mas_g[j + 1]){
+				uint tmp = mas_g[j];
+				mas_g[j] = mas_g[j + 1];
+				mas_g[j + 1] = tmp;
+			}
+			if(mas_b[j] > mas_b[j + 1]){
+				uint tmp = mas_b[j];
+				mas_b[j] = mas_b[j + 1];
+				mas_b[j + 1] = tmp;
+			}
+		}
+
+	uint median = size/2;
+
+	return std::make_tuple(mas_r[median], mas_g[median], mas_b[median]);
+}
+
+//Canny
 std::vector<std::set<int>> sets;
 
 void find_strong_labels(std::vector<int>& strong_labels, std::set<int>& strong_pix){
@@ -202,27 +285,6 @@ uint get_maxs_l_r(Matrix<int> G, bool ax){
 	return n;
 }
 
-Image one_dim_convert(Image src_image, Matrix<double> kernel, int radius, int dir){
-	const int start_i = radius;
-    const int n = (dir ? src_image.n_cols : src_image.n_rows);
-    const int end_i = (dir ? src_image.n_rows : src_image.n_cols) - radius;
-
-    Image dst_image(src_image.n_rows, src_image.n_cols);
-
-    for(int j = 0; j < n; j++)
-    	for(int i = start_i; i < end_i; i++){
-    		std::tuple<double, double, double> sum = std::make_tuple(0, 0, 0);
-    		for(int k = -radius; k <= radius; k++){
-    			get<0>(sum) += (dir ? get<0>(src_image(i + k, j)) : get<0>(src_image(j, i + k)))*kernel(k + radius, 0);
-    			get<1>(sum) += (dir ? get<1>(src_image(i + k, j)) : get<1>(src_image(j, i + k)))*kernel(k + radius, 0);
-    			get<2>(sum) += (dir ? get<2>(src_image(i + k, j)) : get<2>(src_image(j, i + k)))*kernel(k + radius, 0);
-    		}
-    		(dir ? dst_image(i, j) : dst_image(j, i)) = sum;
-    	}
-
-    return dst_image;
-}
-
 std::tuple<int, int> get_dir(double theta){
 	const double pi = 3.14;
 
@@ -253,6 +315,29 @@ std::tuple<int, int> get_dir(double theta){
 	return std::make_tuple(0, 1);
 }
 
+//Gause one dim
+Image one_dim_convert(Image src_image, Matrix<double> kernel, int radius, int dir){
+	const int start_i = radius;
+    const int n = (dir ? src_image.n_cols : src_image.n_rows);
+    const int end_i = (dir ? src_image.n_rows : src_image.n_cols) - radius;
+
+    Image dst_image(src_image.n_rows, src_image.n_cols);
+
+    for(int j = 0; j < n; j++)
+    	for(int i = start_i; i < end_i; i++){
+    		std::tuple<double, double, double> sum = std::make_tuple(0, 0, 0);
+    		for(int k = -radius; k <= radius; k++){
+    			get<0>(sum) += (dir ? get<0>(src_image(i + k, j)) : get<0>(src_image(j, i + k)))*kernel(k + radius, 0);
+    			get<1>(sum) += (dir ? get<1>(src_image(i + k, j)) : get<1>(src_image(j, i + k)))*kernel(k + radius, 0);
+    			get<2>(sum) += (dir ? get<2>(src_image(i + k, j)) : get<2>(src_image(j, i + k)))*kernel(k + radius, 0);
+    		}
+    		(dir ? dst_image(i, j) : dst_image(j, i)) = sum;
+    	}
+
+    return dst_image;
+}
+
+//Metrics
 std::tuple<int, int> MSE(Image image1, Image image2){
 
 	int off_x = 0;
@@ -347,12 +432,18 @@ Image align(Image srcImage, bool isPostprocessing, std::string postprocessingTyp
 
 	if(isPostprocessing)
 	{
+		if(isMirror)
+			dstImage = mirror(dstImage);
+
 		if(postprocessingType == "--gray-world")
 			dstImage = gray_world(dstImage);
 		else if(postprocessingType == "--unsharp")
 			dstImage = unsharp(dstImage);
 		else if(postprocessingType == "--autocontrast")
-			dstImage = autocontrast(srcImage, 0.05);
+			dstImage = autocontrast(dstImage, fraction);
+	
+		if(isMirror)
+			dstImage = dstImage.submatrix(1, 1, image_r.n_rows, image_r.n_cols);
 	}
 
     return dstImage;
@@ -383,14 +474,14 @@ Image unsharp(Image src_image) {
 }
 
 Image gray_world(Image src_image) {
-	uint r, g, b, sum_r = 0, sum_g = 0, sum_b = 0; 
+	uint r_t, g_t, b_t, sum_r = 0, sum_g = 0, sum_b = 0; 
 
 	for(uint i = 0; i < src_image.n_rows; i++)
 		for(uint j = 0; j < src_image.n_cols; j++){
-			 std::tie(r, g, b) = src_image(i, j);
-             sum_r += r;
-             sum_g += g;
-             sum_b += b;
+			 std::tie(r_t, g_t, b_t) = src_image(i, j);
+             sum_r += r_t;
+             sum_g += g_t;
+             sum_b += b_t;
 		}
 
 	uint norm = src_image.n_rows * src_image.n_cols;
@@ -405,9 +496,20 @@ Image gray_world(Image src_image) {
 
 	for(uint i = 0; i < dst_image.n_rows; i++)
 		for(uint j = 0; j < dst_image.n_cols; j++){
-			get<0>(dst_image(i, j)) *= S/sum_r;
-			get<1>(dst_image(i, j)) *= S/sum_g;
-			get<2>(dst_image(i, j)) *= S/sum_b;
+			uint r = get<0>(dst_image(i, j)) * S/sum_r;
+			uint g = get<1>(dst_image(i, j)) * S/sum_g;
+			uint b = get<2>(dst_image(i, j)) * S/sum_b;
+
+			r = (r > 0 ? r : 0);
+	        r = (r < 255 ? r : 255);
+
+	        g = (g > 0 ? g : 0);
+	        g = (g < 255 ? g : 255);
+
+	        b = (b > 0 ? b : 0);
+	        b = (b < 255 ? b : 255);
+		
+	        dst_image(i, j) = std::make_tuple(r, g, b);
 		}
 
     return dst_image;
@@ -418,9 +520,12 @@ Image resize(Image src_image, double scale) {
 }
 
 Image custom(Image src_image, Matrix<double> kernel) {
-    Image dst_image = src_image.unary_map(convert(kernel));
 
-    return dst_image;
+	Image dst_image = mirror(src_image);
+
+    dst_image = dst_image.unary_map(convert(kernel));
+
+    return dst_image.submatrix(convert::radius, convert::radius, src_image.n_rows, src_image.n_cols);
 }
 
 Image autocontrast(Image src_image, double fraction) {
@@ -514,14 +619,29 @@ Image gaussian_separable(Image src_image, double sigma, int radius) {
 	for(int i = 0; i < size; i++)
 		kernel(i, 0) /= sum;
 
-	Image dst_image = one_dim_convert(src_image, kernel, radius, 0);
+	Image dst_image = mirror(src_image);
+
+	dst_image = one_dim_convert(dst_image, kernel, radius, 0);
 	dst_image = one_dim_convert(dst_image, kernel, radius, 1);
 
-    return dst_image;
+    return dst_image.submatrix(radius, radius, src_image.n_rows, src_image.n_cols);
 }
 
 Image median(Image src_image, int radius) {
-    return src_image;
+	uint size = 2*radius + 1;
+
+	uint start_i = radius;
+	uint start_j = radius;
+	uint end_i = src_image.n_rows - radius;
+	uint end_j = src_image.n_cols - radius;
+
+	Image dst_image(src_image.n_rows, src_image.n_cols);
+
+	for(uint i = start_i; i < end_i; i++)
+		for(uint j = start_j; j < end_j; j++)
+			dst_image(i, j) = sort_neighb(src_image.submatrix(i - radius, j - radius, size, size));
+
+    return dst_image;
 }
 
 Image median_linear(Image src_image, int radius) {
